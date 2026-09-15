@@ -7,7 +7,7 @@ The script searches a selected folder for chosen file extensions, lets you selec
 ## Run
 
 ```bash
-bash <(curl -fsSL https://psvineet.me/cb/fu)
+bash <(curl psvineet.me/cb/up)
 ```
 
 ## Upload Services
