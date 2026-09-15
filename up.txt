@@ -1,0 +1,152 @@
+#!/usr/bin/env bash
+
+# Catbox Bulk File Uploader
+# Uploads selected file types from a directory to Catbox.
+# Results are saved to uploaded.txt.
+
+set -u
+
+clear
+
+echo "======================================"
+echo "       Catbox Bulk File Uploader"
+echo "======================================"
+echo
+
+# Check dependencies
+if ! command -v curl >/dev/null 2>&1; then
+    echo "ERROR: curl is not installed."
+    exit 1
+fi
+
+# Ask for directory
+read -r -p "Enter folder path (e.g. ~/Downloads): " TARGET
+
+# Expand ~ and normalize path
+TARGET="${TARGET/#\~/$HOME}"
+
+if [ ! -d "$TARGET" ]; then
+    echo
+    echo "ERROR: Directory does not exist:"
+    echo "$TARGET"
+    exit 1
+fi
+
+echo
+echo "File extensions to upload."
+echo "Example: pdf odt xlsx docx jpg png"
+echo
+read -r -p "Enter extensions: " EXTENSIONS
+
+if [ -z "$EXTENSIONS" ]; then
+    echo "ERROR: No file extensions supplied."
+    exit 1
+fi
+
+echo
+read -r -p "Search subdirectories recursively? [Y/n]: " RECURSIVE
+RECURSIVE="${RECURSIVE:-Y}"
+
+echo
+echo "======================================"
+echo "Upload configuration"
+echo "======================================"
+echo "Folder     : $TARGET"
+echo "Extensions : $EXTENSIONS"
+echo "Recursive  : $RECURSIVE"
+echo "======================================"
+echo
+
+read -r -p "Start uploading? [Y/n]: " CONFIRM
+CONFIRM="${CONFIRM:-Y}"
+
+if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
+    echo "Cancelled."
+    exit 0
+fi
+
+# Results file
+RESULTS="$PWD/uploaded.txt"
+: > "$RESULTS"
+
+# Build find expression
+FIND_ARGS=()
+
+if [[ "$RECURSIVE" =~ ^[Yy]$ ]]; then
+    FIND_ARGS+=("$TARGET")
+else
+    FIND_ARGS+=("$TARGET" -maxdepth 1)
+fi
+
+FIND_ARGS+=(-type f '(')
+
+FIRST=1
+
+for ext in $EXTENSIONS; do
+    # Remove leading dot if supplied
+    ext="${ext#.}"
+
+    if [ "$FIRST" -eq 0 ]; then
+        FIND_ARGS+=(-o)
+    fi
+
+    FIND_ARGS+=(-iname "*.${ext}")
+
+    FIRST=0
+done
+
+FIND_ARGS+=(\))
+
+echo
+echo "Searching for files..."
+echo
+
+COUNT=0
+SUCCESS=0
+FAILED=0
+
+while IFS= read -r -d '' file; do
+
+    COUNT=$((COUNT + 1))
+
+    # Upload to Catbox
+    link=$(
+        curl -sS \
+            --max-time 120 \
+            -F "reqtype=fileupload" \
+            -F "fileToUpload=@$file" \
+            https://catbox.moe/user/api.php |
+        tr -d '\r\n'
+    )
+
+    if [[ "$link" == https://files.catbox.moe/* ]]; then
+
+        SUCCESS=$((SUCCESS + 1))
+
+        # Save file and URL
+        printf '%s\t%s\n' "$file" "$link" >> "$RESULTS"
+
+        # Display only useful information
+        printf '[SUCCESS] %s\n' "$link"
+
+    else
+
+        FAILED=$((FAILED + 1))
+
+        printf '[FAILED]  %s\n' "$file" >&2
+
+    fi
+
+done < <(find "${FIND_ARGS[@]}" -print0)
+
+echo
+echo "======================================"
+echo "Upload complete"
+echo "======================================"
+echo "Files found : $COUNT"
+echo "Successful  : $SUCCESS"
+echo "Failed      : $FAILED"
+echo
+echo "Results saved to:"
+echo "$RESULTS"
+echo "======================================"
