@@ -220,7 +220,7 @@ The TempFile API currently documents a maximum of 20 files per request and a 100
 The script itself is hosted at:
 
 ```text
-https://psvineet.me/cb/fu
+https://psvineet.me/cb/up
 ```
 
 The hosted file is only downloaded and executed locally. Selected files are uploaded directly from the local machine to the chosen upload service.
