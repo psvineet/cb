@@ -1,6 +1,6 @@
-# Catbox / Litterbox Bulk File Uploader
+# Catbox / TempFile Bulk File Uploader
 
-A simple Bash CLI for selecting and uploading multiple files to either **Catbox** or **Litterbox**.
+A simple Bash CLI for selecting and uploading multiple files to either **Catbox** or **TempFile**.
 
 The script searches a selected folder for chosen file extensions, lets you select individual files or groups of files, uploads them with a progress bar, and displays the original filename with the resulting URL.
 
@@ -12,41 +12,46 @@ bash <(curl psvineet.me/cb/up)
 
 ## Upload Services
 
-The script first asks which service to use:
+The script supports two upload services:
 
 ```text
 Upload service:
 
-1. Catbox    (permanent)
-2. Litterbox (temporary)
-
-Select [1-2]:
+1. Catbox    (permanent) - 200 MB per file
+2. TempFile (temporary) - 100 MB per file, up to 20 files
 ```
 
 ### Catbox
 
-Catbox is the normal long-term upload option.
+- Permanent file hosting.
+- Maximum file size: **200 MB per file**.
+- The uploader sends each selected file as a separate upload request.
+- Catbox does not provide the temporary expiration options used by TempFile.
 
-### Litterbox
+### TempFile
 
-Litterbox is for temporary uploads. It asks for an expiration period:
+TempFile is used for temporary uploads.
+
+- Maximum file size: **100 MB per file**.
+- Maximum: **20 files per API request**.
+- The script limits a TempFile upload selection to **20 files**.
+- No authentication is required.
+- Files are automatically deleted after the selected expiration period.
+
+TempFile expiration options:
 
 ```text
-Litterbox expiration:
-
 1. 1 hour
-2. 12 hours
+2. 6 hours
 3. 24 hours
-4. 72 hours
-
-Select [1-4]:
+4. 48 hours
 ```
 
-These are the expiration values supported by the Litterbox API: `1h`, `12h`, `24h`, and `72h`. 
+These are the expiration periods supported by the TempFile API.
 
 ## Folder
 
-The script then asks for the folder to search:
+The script asks for the folder to search:
 
 ```text
 Folder: Downloads
@@ -59,7 +64,7 @@ Examples:
 ```text
 Downloads
 ~/Downloads
-/home/test/Documents
+/home/user/Documents
 /etc
 .
 ..
@@ -144,6 +149,8 @@ To select everything:
 all
 ```
 
+When TempFile is selected, no more than **20 files** can be selected for upload.
+
 The selected files are shown again before uploading.
 
 ## Confirmation
@@ -168,14 +175,14 @@ Individual API responses are not printed.
 
 ## Results
 
-After the upload, the script displays the original filename and its URL:
+After the upload, the script displays the original filename and its URL in the same format for both services:
 
 ```text
 Uploaded files:
 --------------------------------------
 document.pdf - https://files.catbox.moe/abc123.pdf
 notes.pdf - https://files.catbox.moe/def456.pdf
-report.odt - https://litterbox.catbox.moe/resources/... 
+report.odt - https://tempfile.org/abc123/
 --------------------------------------
 ```
 
@@ -197,6 +204,16 @@ The URLs are held in memory only while the script is running.
 - `curl`
 - Internet connection
 - A file type supported by the selected service
+- Files must be within the selected service's file-size limit
+
+## Service Limits Summary
+
+| Service | Type | Maximum file size | File count | Expiration |
+|---|---|---:|---:|---|
+| Catbox | Permanent | 200 MB per file | - | Permanent |
+| TempFile | Temporary | 100 MB per file | Up to 20 files per API request | 1, 6, 24, or 48 hours |
+
+The TempFile API currently documents a maximum of 20 files per request and a 100 MB maximum per file. citeturn0search0
 
 ## Notes
 
@@ -206,6 +223,4 @@ The script itself is hosted at:
 https://psvineet.me/cb/fu
 ```
 
-The hosted file is only downloaded and executed locally. The selected files are uploaded directly from the local machine to the chosen Catbox service.
-
-Litterbox is specifically intended for temporary uploads, while Catbox is the normal long-term upload service.
+The hosted file is only downloaded and executed locally. Selected files are uploaded directly from the local machine to the chosen upload service.
