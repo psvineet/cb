@@ -25,7 +25,7 @@ Examples:
 ```text
 Downloads
 ~/Downloads
-/home/gk/Documents
+/home/vineet/Documents
 /etc
 .
 ..
