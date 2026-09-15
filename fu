@@ -5,7 +5,7 @@ set -u
 clear
 
 echo "======================================"
-echo "        Catbox Bulk File Uploader"
+echo "       Catbox / Litterbox Uploader"
 echo "======================================"
 echo
 
@@ -15,9 +15,59 @@ if ! command -v curl >/dev/null 2>&1; then
 fi
 
 # --------------------------------------
+# Upload service
+# --------------------------------------
+
+echo "Upload service:"
+echo
+echo "1. Catbox    (permanent)"
+echo "2. Litterbox (temporary)"
+echo
+
+read -r -p "Select [1-2]: " SERVICE
+
+case "$SERVICE" in
+    1)
+        API_URL="https://catbox.moe/user/api.php"
+        SERVICE_NAME="Catbox"
+        ;;
+    2)
+        API_URL="https://litterbox.catbox.moe/resources/internals/api.php"
+        SERVICE_NAME="Litterbox"
+
+        echo
+        echo "Litterbox expiration:"
+        echo
+        echo "1. 1 hour"
+        echo "2. 12 hours"
+        echo "3. 24 hours"
+        echo "4. 72 hours"
+        echo
+
+        read -r -p "Select [1-4]: " EXPIRATION
+
+        case "$EXPIRATION" in
+            1) TIME="1h" ;;
+            2) TIME="12h" ;;
+            3) TIME="24h" ;;
+            4) TIME="72h" ;;
+            *)
+                echo "Invalid expiration."
+                exit 1
+                ;;
+        esac
+        ;;
+    *)
+        echo "Invalid service."
+        exit 1
+        ;;
+esac
+
+# --------------------------------------
 # Folder
 # --------------------------------------
 
+echo
 read -r -p "Folder: " TARGET
 
 TARGET="${TARGET/#\~/$HOME}"
@@ -50,7 +100,7 @@ read -r -p "Search subdirectories recursively? [Y/n]: " RECURSIVE
 RECURSIVE="${RECURSIVE:-Y}"
 
 # --------------------------------------
-# Build find command
+# Build find arguments
 # --------------------------------------
 
 FIND_ARGS=()
@@ -66,7 +116,6 @@ FIND_ARGS+=(-type f '(')
 FIRST=1
 
 for ext in $EXTENSIONS; do
-
     ext="${ext#.}"
 
     if [ "$FIRST" -eq 0 ]; then
@@ -74,9 +123,7 @@ for ext in $EXTENSIONS; do
     fi
 
     FIND_ARGS+=(-iname "*.${ext}")
-
     FIRST=0
-
 done
 
 FIND_ARGS+=(\))
@@ -106,10 +153,7 @@ echo
 # --------------------------------------
 
 for ((i=0; i<TOTAL; i++)); do
-
     NUM=$((i + 1))
-
-    # Show path relative to selected folder
     DISPLAY="${FILES[$i]}"
 
     if [[ "$DISPLAY" == "$TARGET/"* ]]; then
@@ -117,7 +161,6 @@ for ((i=0; i<TOTAL; i++)); do
     fi
 
     printf "%3d. %s\n" "$NUM" "$DISPLAY"
-
 done
 
 echo
@@ -148,20 +191,15 @@ fi
 SELECTED=()
 
 if [[ "$SELECTION" =~ ^[Aa][Ll][Ll]$ ]]; then
-
     for ((i=0; i<TOTAL; i++)); do
         SELECTED+=("$i")
     done
-
 else
-
     IFS=',' read -ra PARTS <<< "$SELECTION"
 
     for PART in "${PARTS[@]}"; do
 
-        # Range: 3-7
         if [[ "$PART" =~ ^([0-9]+)-([0-9]+)$ ]]; then
-
             START="${BASH_REMATCH[1]}"
             END="${BASH_REMATCH[2]}"
 
@@ -172,16 +210,15 @@ else
             fi
 
             for ((n=START; n<=END; n++)); do
-
                 if [ "$n" -ge 1 ] && [ "$n" -le "$TOTAL" ]; then
                     SELECTED+=("$((n - 1))")
+                else
+                    echo "Invalid selection: $n"
+                    exit 1
                 fi
-
             done
 
-        # Single number
         elif [[ "$PART" =~ ^[0-9]+$ ]]; then
-
             if [ "$PART" -ge 1 ] && [ "$PART" -le "$TOTAL" ]; then
                 SELECTED+=("$((PART - 1))")
             else
@@ -190,14 +227,10 @@ else
             fi
 
         else
-
             echo "Invalid selection: $PART"
             exit 1
-
         fi
-
     done
-
 fi
 
 # --------------------------------------
@@ -205,20 +238,16 @@ fi
 # --------------------------------------
 
 UNIQUE_SELECTED=()
-
 declare -A SEEN
 
 for INDEX in "${SELECTED[@]}"; do
-
     if [[ -z "${SEEN[$INDEX]+x}" ]]; then
         SEEN[$INDEX]=1
         UNIQUE_SELECTED+=("$INDEX")
     fi
-
 done
 
 SELECTED=("${UNIQUE_SELECTED[@]}")
-
 SELECTED_COUNT=${#SELECTED[@]}
 
 if [ "$SELECTED_COUNT" -eq 0 ]; then
@@ -233,21 +262,18 @@ fi
 echo
 echo "======================================"
 echo "Selected files: $SELECTED_COUNT"
+echo "Service: $SERVICE_NAME"
 echo "======================================"
 echo
 
 for INDEX in "${SELECTED[@]}"; do
-
     DISPLAY="${FILES[$INDEX]}"
 
     if [[ "$DISPLAY" == "$TARGET/"* ]]; then
         DISPLAY="${DISPLAY#"$TARGET"/}"
     fi
 
-    printf "%3d. %s\n" \
-        "$((INDEX + 1))" \
-        "$DISPLAY"
-
+    printf "%3d. %s\n" "$((INDEX + 1))" "$DISPLAY"
 done
 
 # --------------------------------------
@@ -258,7 +284,6 @@ echo
 echo "======================================"
 
 read -r -p "Upload selected files? [Y/n]: " CONFIRM
-
 CONFIRM="${CONFIRM:-Y}"
 
 if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
@@ -286,40 +311,41 @@ TOTAL_SELECTED=${#SELECTED[@]}
 for INDEX in "${SELECTED[@]}"; do
 
     FILE="${FILES[$INDEX]}"
-
     COUNT=$((COUNT + 1))
 
-    LINK=$(
-        curl -sS \
-            --max-time 120 \
-            -F "reqtype=fileupload" \
-            -F "fileToUpload=@$FILE" \
-            https://catbox.moe/user/api.php |
-        tr -d '\r\n'
-    )
-
-    if [[ "$LINK" == https://files.catbox.moe/* ]]; then
-
-        SUCCESS=$((SUCCESS + 1))
-
-        URLS+=("$LINK")
-        NAMES+=("$(basename "$FILE")")
-
+    if [ "$SERVICE" = "1" ]; then
+        LINK=$(
+            curl -sS \
+                --max-time 120 \
+                -F "reqtype=fileupload" \
+                -F "fileToUpload=@$FILE" \
+                "$API_URL" |
+            tr -d '\r\n'
+        )
     else
-
-        FAILED=$((FAILED + 1))
-
-        URLS+=("")
-        NAMES+=("$(basename "$FILE")")
-
+        LINK=$(
+            curl -sS \
+                --max-time 120 \
+                -F "reqtype=fileupload" \
+                -F "time=$TIME" \
+                -F "fileToUpload=@$FILE" \
+                "$API_URL" |
+            tr -d '\r\n'
+        )
     fi
 
-    # ----------------------------------
+    if [[ "$LINK" == https://* ]]; then
+        SUCCESS=$((SUCCESS + 1))
+        URLS+=("$LINK")
+        NAMES+=("$(basename "$FILE")")
+    else
+        FAILED=$((FAILED + 1))
+        URLS+=("")
+        NAMES+=("$(basename "$FILE")")
+    fi
+
     # Progress bar
-    # ----------------------------------
-
     PERCENT=$((COUNT * 100 / TOTAL_SELECTED))
-
     WIDTH=30
     FILLED=$((PERCENT * WIDTH / 100))
     EMPTY=$((WIDTH - FILLED))
@@ -332,7 +358,6 @@ for INDEX in "${SELECTED[@]}"; do
         "$PERCENT" \
         "$COUNT" \
         "$TOTAL_SELECTED"
-
 done
 
 printf '\n\n'
@@ -353,20 +378,14 @@ echo "Uploaded files:"
 echo "--------------------------------------"
 
 for ((i=0; i<TOTAL_SELECTED; i++)); do
-
     if [ -n "${URLS[$i]}" ]; then
-
         printf "%s - %s\n" \
             "${NAMES[$i]}" \
             "${URLS[$i]}"
-
     else
-
         printf "%s - FAILED\n" \
             "${NAMES[$i]}"
-
     fi
-
 done
 
 echo "--------------------------------------"
