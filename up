@@ -5,7 +5,7 @@ set -u
 clear
 
 echo "======================================"
-echo "       Catbox / Litterbox Uploader"
+echo "       Catbox / TempFile Uploader"
 echo "======================================"
 echo
 
@@ -20,8 +20,8 @@ fi
 
 echo "Upload service:"
 echo
-echo "1. Catbox    (permanent)"
-echo "2. Litterbox (temporary)"
+echo "1. Catbox    (permanent) - 200 MB per file"
+echo "2. TempFile (temporary) - 100 MB per file, up to 20 files"
 echo
 
 read -r -p "Select [1-2]: " SERVICE
@@ -32,25 +32,25 @@ case "$SERVICE" in
         SERVICE_NAME="Catbox"
         ;;
     2)
-        API_URL="https://litterbox.catbox.moe/resources/internals/api.php"
-        SERVICE_NAME="Litterbox"
+        API_URL="https://tempfile.org/api/upload/local"
+        SERVICE_NAME="TempFile"
 
         echo
-        echo "Litterbox expiration:"
+        echo "TempFile expiration:"
         echo
         echo "1. 1 hour"
-        echo "2. 12 hours"
+        echo "2. 6 hours"
         echo "3. 24 hours"
-        echo "4. 72 hours"
+        echo "4. 48 hours"
         echo
 
         read -r -p "Select [1-4]: " EXPIRATION
 
         case "$EXPIRATION" in
-            1) TIME="1h" ;;
-            2) TIME="12h" ;;
-            3) TIME="24h" ;;
-            4) TIME="72h" ;;
+            1) TIME="1" ;;
+            2) TIME="6" ;;
+            3) TIME="24" ;;
+            4) TIME="48" ;;
             *)
                 echo "Invalid expiration."
                 exit 1
@@ -260,6 +260,14 @@ fi
 # --------------------------------------
 
 echo
+if [ "$SERVICE" = "2" ] && [ "$SELECTED_COUNT" -gt 20 ]; then
+    echo
+    echo "ERROR: TempFile allows a maximum of 20 files per request."
+    echo "Please select 20 files or fewer."
+    exit 1
+fi
+
+echo
 echo "======================================"
 echo "Selected files: $SELECTED_COUNT"
 echo "Service: $SERVICE_NAME"
@@ -323,15 +331,15 @@ for INDEX in "${SELECTED[@]}"; do
             tr -d '\r\n'
         )
     else
-        LINK=$(
+        RESPONSE=$(
             curl -sS \
                 --max-time 120 \
-                -F "reqtype=fileupload" \
-                -F "time=$TIME" \
-                -F "fileToUpload=@$FILE" \
-                "$API_URL" |
-            tr -d '\r\n'
+                -F "files=@$FILE" \
+                -F "expiryHours=$TIME" \
+                "$API_URL"
         )
+
+        LINK=$(printf '%s' "$RESPONSE" | sed -n 's/.*"success"[[:space:]]*:[[:space:]]*true.*"url"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p')
     fi
 
     if [[ "$LINK" == https://* ]]; then
